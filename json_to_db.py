@@ -67,8 +67,10 @@ def create_database(db_path: str) -> None:
     CREATE TABLE IF NOT EXISTS apps (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
+        version TEXT,
         ranking INTEGER,
         url TEXT NOT NULL,
+        date TEXT NOT NULL,
         timestamp TEXT NOT NULL,
         created_at TEXT NOT NULL
     )
@@ -109,6 +111,25 @@ def import_json_to_db(json_file_path: str, db_path: str) -> None:
     # 獲取當前時間
     current_time = datetime.now().isoformat()
 
+    # 從時間戳中提取日期部分
+    date = data.get('timestamp', '').split('T')[0]
+
+    # 檢查是否已經存在相同日期的數據
+    cursor.execute('''
+    SELECT COUNT(*) FROM apps WHERE date = ?
+    ''', (date,))
+
+    if cursor.fetchone()[0] > 0:
+        logging.info(f"已存在 {date} 的數據，將覆蓋原有數據")
+        # 刪除相同日期的數據
+        cursor.execute('''
+        DELETE FROM apps WHERE date = ?
+        ''', (date,))
+        # 刪除相同日期的錯誤記錄
+        cursor.execute('''
+        DELETE FROM errors WHERE date(timestamp) = ?
+        ''', (date,))
+
     # 導入應用程式數據
     for app in data.get('apps', []):
         if 'error' in app:
@@ -126,12 +147,14 @@ def import_json_to_db(json_file_path: str, db_path: str) -> None:
         else:
             # 導入應用程式數據
             cursor.execute('''
-            INSERT INTO apps (name, ranking, url, timestamp, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO apps (name, version, ranking, url, date, timestamp, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ''', (
                 app['name'],
+                app['version'],
                 int(app['ranking']),
                 app['url'],
+                date,
                 app['timestamp'],
                 current_time
             ))
@@ -158,7 +181,7 @@ def query_apps(db_path: str, limit: int = 10) -> List[Dict]:
     cursor = conn.cursor()
 
     cursor.execute('''
-    SELECT name, ranking, url, timestamp
+    SELECT name, version, ranking, url, date, timestamp
     FROM apps
     ORDER BY ranking ASC
     LIMIT ?
@@ -206,12 +229,12 @@ def print_query_results(apps: List[Dict], errors: List[Dict]) -> None:
     """
     print("\n=== App Store 應用程式排名 (資料庫查詢結果) ===")
     print(f"查詢時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("-" * 50)
-    print(f"{'排名':<6} {'應用程式名稱':<40} {'網址'}")
-    print("-" * 50)
+    print("-" * 80)
+    print(f"{'排名':<6} {'應用程式名稱':<25} {'版本':<8} {'日期':<10} {'網址'}")
+    print("-" * 80)
 
     for app in apps:
-        print(f"{app['ranking']:<6} {app['name']:<40} {app['url']}")
+        print(f"{app['ranking']:<6} {app['name']:<25} {app['version']:<8} {app['date']:<10} {app['url']}")
 
     if errors:
         print("\n=== 錯誤記錄 ===")
@@ -223,7 +246,7 @@ def print_query_results(apps: List[Dict], errors: List[Dict]) -> None:
             print(f"{error['name']:<40} {error['url']}")
             print(f"錯誤信息: {error['error_message']}")
 
-    print("-" * 50)
+    print("-" * 80)
 
 def main():
     import sys

@@ -93,6 +93,7 @@ class AppStoreCrawler:
                 # 抓取應用程式資訊
                 app_info = {
                     'name': self._get_app_name(soup),
+                    'version': self._get_version(soup),
                     'ranking': self._get_app_ranking(soup),
                     'url': url,
                     'timestamp': get_taiwan_time()
@@ -126,6 +127,14 @@ class AppStoreCrawler:
         """獲取應用程式名稱"""
         try:
             return soup.find('h1', class_='product-header__title').get_text(strip=True)
+        except AttributeError:
+            return "未知"
+
+    def _get_version(self, soup: BeautifulSoup) -> str:
+        """獲取應用程式版本號"""
+        try:
+            version_text = soup.find('p', class_='whats-new__latest__version').get_text(strip=True)
+            return version_text.replace('版本', '').strip()
         except AttributeError:
             return "未知"
 
